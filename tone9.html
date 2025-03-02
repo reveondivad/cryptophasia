@@ -1,0 +1,1977 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tonal Language</title>
+<style>
+
+</style>
+</head>
+<body>
+
+
+
+<script>
+
+class TonalGrid {
+    constructor(container) {
+        this.container = container;
+        this.gridSize = { rows: 5, cols: 7 };
+        this.colorMap = this.generateColorMap();
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.setupGrid();
+    }
+
+    /** Generate color map for the grid cells */
+    generateColorMap() {
+        // Scientific color scheme inspired by spectrum analysis
+        return [
+            '#4B0082', // Indigo
+            '#0000FF', // Blue
+            '#00FF00', // Green
+            '#FFFF00', // Yellow
+            '#FF7F00', // Orange
+            '#FF0000', // Red
+            '#8B00FF'  // Violet
+        ];
+    }
+
+    /** Setup Grid UI */
+    setupGrid() {
+        const gridContainer = document.createElement("div");
+        gridContainer.className = "tonal-grid-container";
+
+        const title = document.createElement("h3");
+        title.textContent = "Tonal Language Grid";
+        title.style.color = "var(--primary)";
+        gridContainer.appendChild(title);
+
+        this.grid = document.createElement("div");
+        this.grid.className = "tonal-grid";
+        gridContainer.appendChild(this.grid);
+
+        this.container.appendChild(gridContainer);
+
+        // Populate grid
+        this.cells = [];
+        for (let r = 0; r < this.gridSize.rows; r++) {
+            for (let c = 0; c < this.gridSize.cols; c++) {
+                let cell = document.createElement("div");
+                cell.className = "tonal-cell";
+                cell.style.backgroundColor = "#333"; // Default inactive state
+                this.grid.appendChild(cell);
+                this.cells.push(cell);
+            }
+        }
+    }
+
+    /** Clear all cells to inactive state */
+    clearGrid() {
+        this.cells.forEach(cell => {
+            cell.style.backgroundColor = "#333";
+            cell.style.transform = "scale(1)";
+        });
+    }
+
+    /** Light up cell with animation */
+    lightUpCell(index, freq) {
+        if (index >= this.cells.length) return;
+        
+        const cell = this.cells[index];
+        const colorIndex = index % this.colorMap.length;
+        const color = this.colorMap[colorIndex];
+        
+        // Add animation
+        cell.style.backgroundColor = color;
+        cell.style.transform = "scale(1.1)";
+        cell.style.transition = "all 0.3s ease-out";
+        
+        // Reset after delay
+        setTimeout(() => {
+            cell.style.backgroundColor = "#333";
+            cell.style.transform = "scale(1)";
+        }, 700);
+    }
+}
+
+/**
+ * ToneLanguage Conversation UI
+ * A simplified interface that displays both musical tones and text in a conversation
+ */
+
+class ToneLanguageUI {
+constructor() {
+    // 🎵 Audio context setup
+    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // 🔢 Character-to-frequency mapping
+    this.initializeMapping();
+    
+    // 🔄 Processing settings
+    this.processingSpeed = 50;
+    this.isProcessing = false;
+    this.audioQueue = [];
+
+    // 💬 Conversation history
+    this.conversation = [];
+
+    // 🤖 LLM Settings
+    this.llmSettings = {
+        enabled: true,
+        apiKey: '',
+        model: 'gpt-3.5-turbo',
+        apiEndpoint: 'https://api.openai.com/v1/chat/completions',
+        systemPrompt: 'You are a helpful assistant. Keep your responses concise and clear.'
+    };
+
+    // ✅ FIX: Delay audio pipeline setup to ensure UI is ready
+    this.setupUI().then(() => {
+        this.setupAudioPipeline();
+    });
+}
+
+
+  /** 🎼 Initialize character-to-frequency mapping **/
+  initializeMapping() {
+    this.charToFrequency = {};
+    this.frequencyToChar = {};
+    
+    // Base frequency (A3 = 220Hz)
+    const baseFreq = 220;
+    
+    // Map ASCII printable characters (32-126) to musical frequencies
+    for (let i = 32; i <= 126; i++) {
+      const char = String.fromCharCode(i);
+      // Use semitones for musical intervals (12-tone equal temperament)
+      const frequency = Math.round(baseFreq * Math.pow(2, (i - 32) / 12) * 100) / 100;
+      
+      this.charToFrequency[char] = frequency;
+      this.frequencyToChar[frequency] = char;
+    }
+  }
+
+  /** 🎛 Setup Audio Processing Pipeline **/
+  setupAudioPipeline() {
+    this.analyser = this.audioContext.createAnalyser();
+    this.analyser.fftSize = 2048;
+    this.bufferLength = this.analyser.frequencyBinCount;
+    this.dataArray = new Uint8Array(this.bufferLength);
+
+    // 🔊 Internal Gain Node
+    this.gainNode = this.audioContext.createGain();
+    this.gainNode.gain.value = 1.0;
+    this.gainNode.connect(this.audioContext.destination);
+
+    // 📡 Start updating visualization
+    this.updateVisualization();
+  }
+
+  /** 🔄 Continuously Update Spectrogram & Tonal Grid **/
+  updateVisualization() {
+    requestAnimationFrame(() => this.updateVisualization());
+
+    // Get frequency data
+    this.analyser.getByteFrequencyData(this.dataArray);
+
+    // 📡 Update the Spectrogram
+    if (typeof this.updateSpectrogram === "function") {
+      this.updateSpectrogram(this.dataArray);
+    } else {
+      console.error("updateSpectrogram() is not defined.");
+    }
+
+    // 🎹 Update the Tonal Grid
+    if (typeof this.updateTonalGrid === "function") {
+      this.updateTonalGrid(this.dataArray);
+    } else {
+      console.error("updateTonalGrid() is not defined.");
+    }
+  }
+
+  /** 📡 Update the Spectrogram (Scrolling Effect) **/
+updateSpectrogram(frequencyData) {
+    if (!this.spectrogramCanvas) return;
+    
+    const canvas = this.spectrogramCanvas.getContext('2d');
+    if (!canvas) return;
+    
+    const width = this.spectrogramCanvas.width;
+    const height = this.spectrogramCanvas.height;
+    
+    try {
+        const imageData = canvas.getImageData(0, 0, width, height);
+        const pixels = imageData.data;
+
+        // Shift existing data
+        for (let i = 0; i < height; i++) {
+            for (let j = 1; j < width; j++) {
+                const offset = (i * width + j) * 4;
+                pixels[offset - 4] = pixels[offset];     // R
+                pixels[offset - 3] = pixels[offset + 1]; // G
+                pixels[offset - 2] = pixels[offset + 2]; // B
+                pixels[offset - 1] = pixels[offset + 3]; // A
+            }
+        }
+
+        // Draw new data
+        for (let i = 0; i < this.bufferLength; i++) {
+            const value = frequencyData[i];
+            const y = height - Math.floor((i / this.bufferLength) * height);
+            const offset = (y * width + (width - 1)) * 4;
+
+            pixels[offset] = value;           // Red
+            pixels[offset + 1] = 255 - value; // Green
+            pixels[offset + 2] = 128;         // Blue
+            pixels[offset + 3] = 255;         // Alpha
+        }
+
+        canvas.putImageData(imageData, 0, 0);
+    } catch (error) {
+        console.error('Error updating spectrogram:', error);
+    }
+}
+
+  /** 🎹 Update the Tonal Grid **/
+updateTonalGrid(frequencyData) {
+    if (!this.tonalGrid || !this.tonalGrid.clearGrid) return;
+    
+    try {
+        this.tonalGrid.clearGrid();
+
+        // Find top frequencies
+        let topFrequencies = [];
+        for (let i = 0; i < frequencyData.length; i++) {
+            if (frequencyData[i] > 150) {
+                topFrequencies.push({
+                    freq: this.getFrequencyFromIndex(i),
+                    value: frequencyData[i]
+                });
+            }
+        }
+
+        // Sort and take top 5
+        topFrequencies.sort((a, b) => b.value - a.value);
+        topFrequencies = topFrequencies.slice(0, 5);
+
+        // Light up cells
+        topFrequencies.forEach((tone, index) => {
+            if (this.tonalGrid.lightUpCell) {
+                this.tonalGrid.lightUpCell(index, tone.freq);
+            }
+        });
+    } catch (error) {
+        console.error('Error updating tonal grid:', error);
+    }
+}
+  /** 🎵 Convert Frequency Index to Hz **/
+  getFrequencyFromIndex(index) {
+    const nyquist = this.audioContext.sampleRate / 2;
+    return (index / this.bufferLength) * nyquist;
+  }
+
+
+ 
+  /**
+   * Set up the user interface
+   */
+async setupUI() {
+    // First create all the DOM elements
+    await this.createUIElements();
+    
+    // Then initialize audio and visualization components
+    await this.initializeComponents();
+    
+    // Finally start the visualization loop
+    this.startVisualization();
+}
+
+async createUIElements() {
+    // Inject Modern, Scientific UI Styles
+    const style = document.createElement('style');
+    style.textContent = `
+	:root {
+  /* Scientific dark theme - inspired by audio equipment */
+  --bg-dark: #0e0e10;  /* Deep neutral black (studio monitor finish) */
+  --bg-surface: #191922; /* Dark gray with a metallic tone */
+  --bg-surface-light: #22222a; /* Slightly lighter gray-blue for depth */
+
+  --primary: #888ea1; /* Muted steel gray-blue (mixer LED text) */
+  --primary-dark: #636c83; /* Darker version for shadows */
+  
+  --secondary: #b0a875; /* Desaturated brass/gold for subtle highlights */
+  
+  --text-primary: #e5e5e5; /* Soft white (like LED panel text) */
+  --text-secondary: #b8b8b8; /* Medium gray for secondary text */
+  --text-disabled: #6d6d6d; /* Dimmed gray for inactive elements */
+
+  --border: #2f2f3d; /* Subtle deep gray for dividers */
+}
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+        }
+
+        #tone-app {
+            max-width: 800px;
+            margin: auto;
+            padding: 20px;
+            background: var(--bg-surface);
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .app-title {
+            font-size: 22px;
+            color: var(--primary);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .conversation-container {
+            height: 400px;
+            padding: 15px;
+            background: var(--bg-surface-light);
+            border-radius: 8px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Message bubbles */
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: 16px;
+            max-width: 75%;
+            word-break: break-word;
+            margin-bottom: 10px;
+            position: relative;
+        }
+
+        .user-message {
+            background: var(--primary-dark);
+            color: var(--text-primary);
+            align-self: flex-end;
+            border-bottom-right-radius: 6px;
+        }
+
+        .tone-message {
+            background: var(--secondary);
+            color: var(--bg-dark);
+            align-self: flex-start;
+            border-bottom-left-radius: 6px;
+        }
+
+        .llm-message {
+            background: var(--bg-surface-light);
+            color: var(--text-primary);
+            align-self: flex-start;
+            border-bottom-left-radius: 6px;
+        }
+
+        /* Input field & buttons */
+        .input-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            font-size: 16px;
+            background: var(--bg-surface-light);
+            color: var(--text-primary);
+        }
+
+        .message-input:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+
+        .send-btn {
+            padding: 10px 20px;
+            background: var(--primary);
+            color: var(--bg-dark);
+            border: none;
+            border-radius: 16px;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .send-btn:hover {
+            background: var(--primary-dark);
+        }
+
+        /* Controls section */
+        .controls-container {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .tone-control-btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            background: var(--bg-surface-light);
+            color: var(--text-primary);
+            font-size: 14px;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+
+        .tone-control-btn:hover {
+            background: #2d2d38;
+        }
+
+        .tone-control-btn.primary {
+            background: var(--primary);
+            font-weight: 600;
+        }
+
+        .tone-control-btn.primary:hover {
+            background: var(--primary-dark);
+        }
+
+        /* AI Settings Panel */
+        .llm-settings {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            background: var(--bg-surface-light);
+            border: 1px solid var(--border);
+        }
+
+        .llm-settings h3 {
+            margin-top: 0;
+            color: var(--primary);
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+/* Properly Sized Compact Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;  /* Ensures it doesn't stretch */
+    height: 20px;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+/* Hide default checkbox */
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+/* Toggle background */
+.slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-surface-light);
+    transition: 0.3s;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    width: 40px;  /* Fixed width */
+    height: 20px; /* Fixed height */
+}
+
+/* Toggle knob */
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--text-secondary);
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+/* When checked, change colors */
+input:checked + .slider {
+    background-color: var(--primary);
+    border-color: var(--primary-dark);
+}
+
+/* Move knob to the right when enabled */
+input:checked + .slider:before {
+    transform: translateX(18px);
+    background-color: white;
+}
+
+/* Hover effect */
+.toggle-switch:hover .slider {
+    background-color: var(--border);
+}
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
+        }
+/* Fix the AI Model dropdown styling */
+.api-key-input, select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--bg-surface-light);
+    color: var(--text-primary);
+    transition: border 0.2s ease-in-out, background 0.2s ease-in-out;
+}
+
+/* Improve the focus effect */
+.api-key-input:focus, select:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--bg-surface);
+}
+
+/* Style the dropdown arrow */
+select {
+    appearance: none;
+    cursor: pointer;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23b8b8b8"><path d="M7 10l5 5 5-5z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 14px;
+    padding-right: 30px;
+}
+
+/* Improve dropdown hover and interaction */
+select:hover {
+    background: var(--bg-surface);
+}
+
+/* Fix the switch alignment */
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    width: 100%;
+    max-width: 300px;  /* Ensures toggle stays compact */
+}
+
+.settings-row label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    flex-grow: 1;
+    white-space: nowrap;  /* Prevents stretching */
+}
+
+/* Tonal Language Grid - Inspired by Close Encounters */
+.tonal-grid-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 20px;
+    padding: 10px;
+    background: var(--bg-surface-light);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+
+.tonal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 40px);
+    grid-template-rows: repeat(5, 40px);
+    gap: 5px;
+    background: var(--bg-dark);
+    padding: 10px;
+    border-radius: 6px;
+}
+
+.tonal-cell {
+    width: 40px;
+    height: 40px;
+    border-radius: 4px;
+    transition: all 0.3s ease-in-out;
+    background: #333; /* Default inactive */
+    box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--text-primary);
+}
+	
+    `;
+    document.head.appendChild(style);
+
+    // Create Main App Container
+    const appContainer = document.createElement("div");
+    appContainer.id = "tone-app";
+    document.body.appendChild(appContainer);
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "app-header";
+
+    const title = document.createElement("h1");
+    title.className = "app-title";
+    title.textContent = "Tone Language Messenger";
+
+    const speedControl = document.createElement("div");
+    speedControl.innerHTML = `
+      <label>Speed: 
+        <input type="range" min="10" max="200" value="${this.processingSpeed}" id="speed-slider">
+      </label>
+    `;
+
+    header.appendChild(title);
+    header.appendChild(speedControl);
+    appContainer.appendChild(header);
+
+    // Conversation Area
+    this.conversationContainer = document.createElement("div");
+    this.conversationContainer.className = "conversation-container";
+    appContainer.appendChild(this.conversationContainer);
+
+    // Create Tonal Grid Container
+    const tonalGridContainer = document.createElement("div");
+    appContainer.appendChild(tonalGridContainer);
+    this.tonalGrid = new TonalGrid(tonalGridContainer);
+
+    // Create Spectrogram Container
+    const spectrogramContainer = document.createElement("div");
+    spectrogramContainer.className = "spectrogram-container";
+
+    const spectrogramTitle = document.createElement("h3");
+    spectrogramTitle.textContent = "Spectrogram";
+    spectrogramTitle.style.color = "var(--primary)";
+    spectrogramContainer.appendChild(spectrogramTitle);
+
+    this.spectrogramCanvas = document.createElement("canvas");
+    this.spectrogramCanvas.width = 600;
+    this.spectrogramCanvas.height = 150;
+    this.spectrogramCanvas.className = "spectrogram";
+    spectrogramContainer.appendChild(this.spectrogramCanvas);
+    appContainer.appendChild(spectrogramContainer);
+
+    // ABC Notation Container
+    const abcContainer = document.createElement("div");
+    abcContainer.className = "abc-notation-container";
+    appContainer.appendChild(abcContainer);
+
+    this.abcDisplay = new ABCNotationDisplay({
+        container: abcContainer,
+        charToFreq: this.charToFrequency,
+        compactMode: true,
+        showMeasures: true
+    });
+
+    // Input Area
+    const inputContainer = document.createElement("div");
+    inputContainer.className = "input-container";
+
+    this.messageInput = document.createElement("input");
+    this.messageInput.className = "message-input";
+    this.messageInput.type = "text";
+    this.messageInput.placeholder = "Type a message...";
+
+    const sendButton = document.createElement("button");
+    sendButton.className = "send-btn";
+    sendButton.textContent = "Send";
+    sendButton.onclick = () => this.sendMessage();
+
+    this.messageInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") this.sendMessage();
+    });
+
+    inputContainer.appendChild(this.messageInput);
+    inputContainer.appendChild(sendButton);
+    appContainer.appendChild(inputContainer);
+
+    // Control Buttons
+    const controlsContainer = document.createElement("div");
+    controlsContainer.className = "controls-container";
+
+    const askAiButton = document.createElement("button");
+    askAiButton.className = "tone-control-btn primary";
+    askAiButton.innerHTML = "🤖 Ask AI";
+    askAiButton.onclick = () => this.askLLM();
+
+    const listenButton = document.createElement("button");
+    listenButton.className = "tone-control-btn";
+    listenButton.innerHTML = "🎤 Listen for Tones";
+    listenButton.onclick = () => this.startListening();
+
+    const replayButton = document.createElement("button");
+    replayButton.className = "tone-control-btn";
+    replayButton.innerHTML = "🔄 Replay Last";
+    replayButton.onclick = () => this.replayLastMessage();
+
+    const showTableButton = document.createElement("button");
+    showTableButton.className = "tone-control-btn";
+    showTableButton.innerHTML = "📊 Frequency Table";
+    showTableButton.onclick = () => this.showFrequencyTable();
+
+    controlsContainer.appendChild(askAiButton);
+    controlsContainer.appendChild(listenButton);
+    controlsContainer.appendChild(replayButton);
+    controlsContainer.appendChild(showTableButton);
+    appContainer.appendChild(controlsContainer);
+
+    // LLM Settings Panel
+    const llmSettings = document.createElement("div");
+    llmSettings.className = "llm-settings";
+
+    const settingsTitle = document.createElement("h3");
+    settingsTitle.textContent = "AI Integration Settings";
+    llmSettings.appendChild(settingsTitle);
+
+    // Enable/Disable LLM Toggle
+    const enableRow = document.createElement("div");
+    enableRow.className = "settings-row";
+
+    const enableLabel = document.createElement("label");
+    enableLabel.textContent = "Enable AI Integration";
+
+    const toggleSwitch = document.createElement("label");
+    toggleSwitch.className = "toggle-switch";
+
+    this.llmEnabledCheckbox = document.createElement("input");
+    this.llmEnabledCheckbox.type = "checkbox";
+    this.llmEnabledCheckbox.checked = this.llmSettings.enabled;
+    this.llmEnabledCheckbox.onchange = () => {
+        this.llmSettings.enabled = this.llmEnabledCheckbox.checked;
+    };
+
+    const slider = document.createElement("span");
+    slider.className = "slider";
+
+    toggleSwitch.appendChild(this.llmEnabledCheckbox);
+    toggleSwitch.appendChild(slider);
+
+    enableRow.appendChild(enableLabel);
+    enableRow.appendChild(toggleSwitch);
+    llmSettings.appendChild(enableRow);
+
+    // API Key Input
+    const apiKeyRow = document.createElement("div");
+    apiKeyRow.className = "settings-row";
+    apiKeyRow.style.flexDirection = "column";
+    apiKeyRow.style.alignItems = "flex-start";
+
+    const apiKeyLabel = document.createElement("label");
+    apiKeyLabel.textContent = "API Key";
+
+    this.apiKeyInput = document.createElement("input");
+    this.apiKeyInput.type = "password";
+    this.apiKeyInput.className = "api-key-input";
+    this.apiKeyInput.placeholder = "Enter your OpenAI API key";
+    this.apiKeyInput.onchange = () => {
+        this.llmSettings.apiKey = this.apiKeyInput.value;
+    };
+
+    apiKeyRow.appendChild(apiKeyLabel);
+    apiKeyRow.appendChild(this.apiKeyInput);
+    llmSettings.appendChild(apiKeyRow);
+
+    // Model Selection
+    const modelRow = document.createElement("div");
+    modelRow.className = "settings-row";
+
+    const modelLabel = document.createElement("label");
+    modelLabel.textContent = "AI Model";
+
+    const modelSelect = document.createElement("select");
+    modelSelect.className = "api-key-input";
+
+    const models = [
+        { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" },
+        { value: "gpt-4", label: "GPT-4" },
+        { value: "claude-3-opus-20240229", label: "Claude 3 Opus" },
+        { value: "claude-3-sonnet-20240229", label: "Claude 3 Sonnet" }
+    ];
+
+    models.forEach((model) => {
+        const option = document.createElement("option");
+        option.value = model.value;
+        option.textContent = model.label;
+        if (model.value === this.llmSettings.model) {
+            option.selected = true;
+        }
+        modelSelect.appendChild(option);
+    });
+
+    modelSelect.onchange = () => {
+        this.llmSettings.model = modelSelect.value;
+    };
+
+    modelRow.appendChild(modelLabel);
+    modelRow.appendChild(modelSelect);
+    llmSettings.appendChild(modelRow);
+
+    appContainer.appendChild(llmSettings);
+
+    // Add welcome messages
+    setTimeout(() => {
+        this.addMessage('Welcome to Tone Language Messenger !', 'tone');
+        this.addMessage('Type a message and it will be converted to tones', 'tone');
+        this.addMessage('LLM integration is ready - just add your API key below', 'llm');
+        this.addMessage('Hello, this is my first tone message', 'user');
+    }, 500);
+}
+
+
+
+async initializeComponents() {
+    // Initialize audio pipeline
+    this.analyser = this.audioContext.createAnalyser();
+    this.analyser.fftSize = 2048;
+    this.bufferLength = this.analyser.frequencyBinCount;
+    this.dataArray = new Uint8Array(this.bufferLength);
+
+    // Initialize Spectrogram
+    await this.initializeSpectrogram();
+
+    // Initialize Tonal Grid (after DOM elements are ready)
+    await this.initializeTonalGrid();
+
+    // Set up audio connections
+    this.gainNode = this.audioContext.createGain();
+    this.gainNode.gain.value = 1.0;
+    this.gainNode.connect(this.audioContext.destination);
+}
+
+async initializeSpectrogram() {
+    if (!this.spectrogramCanvas) {
+        console.error('Spectrogram canvas element not found');
+        return;
+    }
+    const canvas = this.spectrogramCanvas.getContext('2d');
+    if (!canvas) {
+        console.error('Could not get 2D context for spectrogram');
+        return;
+    }
+    // Initialize canvas for spectrogram
+    canvas.fillStyle = '#000';
+    canvas.fillRect(0, 0, this.spectrogramCanvas.width, this.spectrogramCanvas.height);
+}
+
+async initializeTonalGrid() {
+    if (!this.tonalGrid) {
+        console.error('Tonal grid not initialized');
+        return;
+    }
+}
+
+startVisualization() {
+    // Only start visualization if components are ready
+    if (!this.spectrogramCanvas || !this.tonalGrid) {
+        console.error('Required components not initialized');
+        return;
+    }
+
+    const updateFrame = () => {
+        if (!this.analyser) return;
+        
+        requestAnimationFrame(updateFrame);
+        
+        try {
+            // Get frequency data
+            this.analyser.getByteFrequencyData(this.dataArray);
+
+            // Update Spectrogram if available
+            if (this.spectrogramCanvas) {
+                this.updateSpectrogram(this.dataArray);
+            }
+
+            // Update Tonal Grid if available
+            if (this.tonalGrid) {
+                this.updateTonalGrid(this.dataArray);
+            }
+        } catch (error) {
+            console.error('Error in visualization update:', error);
+        }
+    };
+
+    updateFrame();
+}
+
+  /**
+   * Initialize audio visualizer with dark theme colors
+   */
+  initVisualizer() {
+    this.visualCtx = this.visualizer.getContext('2d');
+    this.analyser = this.audioContext.createAnalyser();
+    this.analyser.fftSize = 2048;
+    this.bufferLength = this.analyser.frequencyBinCount;
+    this.dataArray = new Uint8Array(this.bufferLength);
+    
+    // Connect a silent oscillator to keep the visualization running
+    const silentOsc = this.audioContext.createOscillator();
+    const silentGain = this.audioContext.createGain();
+    silentGain.gain.value = 0;
+    silentOsc.connect(silentGain);
+    silentGain.connect(this.analyser);
+    silentOsc.start();
+    
+    const drawVisualizer = () => {
+      requestAnimationFrame(drawVisualizer);
+      
+      this.analyser.getByteTimeDomainData(this.dataArray);
+      
+      this.visualCtx.fillStyle = '#000';
+      this.visualCtx.fillRect(0, 0, this.visualizer.width, this.visualizer.height);
+      
+      // Draw grid lines for better visualization
+      this.visualCtx.lineWidth = 0.5;
+      this.visualCtx.strokeStyle = '#333';
+      
+      // Horizontal center line
+      this.visualCtx.beginPath();
+      this.visualCtx.moveTo(0, this.visualizer.height / 2);
+      this.visualCtx.lineTo(this.visualizer.width, this.visualizer.height / 2);
+      this.visualCtx.stroke();
+      
+      // Vertical grid lines
+      for (let x = 0; x < this.visualizer.width; x += 50) {
+        this.visualCtx.beginPath();
+        this.visualCtx.moveTo(x, 0);
+        this.visualCtx.lineTo(x, this.visualizer.height);
+        this.visualCtx.stroke();
+      }
+      
+      // Waveform
+      this.visualCtx.lineWidth = 2;
+      this.visualCtx.strokeStyle = '#bb86fc'; // Primary color for waveform
+      this.visualCtx.beginPath();
+      
+      const sliceWidth = this.visualizer.width / this.bufferLength;
+      let x = 0;
+      
+      for (let i = 0; i < this.bufferLength; i++) {
+        const v = this.dataArray[i] / 128.0;
+        const y = v * this.visualizer.height / 2;
+        
+        if (i === 0) {
+          this.visualCtx.moveTo(x, y);
+        } else {
+          this.visualCtx.lineTo(x, y);
+        }
+        
+        x += sliceWidth;
+      }
+      
+      this.visualCtx.lineTo(this.visualizer.width, this.visualizer.height / 2);
+      this.visualCtx.stroke();
+      
+      // Add a subtle glow effect to the waveform
+      this.visualCtx.shadowColor = '#bb86fc';
+      this.visualCtx.shadowBlur = 10;
+      this.visualCtx.shadowOffsetX = 0;
+      this.visualCtx.shadowOffsetY = 0;
+    };
+    
+    drawVisualizer();
+  }
+  
+  /**
+   * Add a message to the conversation
+   * @param {string} text - The message text
+   * @param {string} type - 'user', 'tone', or 'llm'
+   * @param {boolean} isPlaying - Whether this message is currently being played as tones
+   */
+  addMessage(text, type, isPlaying = false) {
+    // Add to conversation history
+    this.conversation.push({ text, type });
+    
+    // Create bubble
+    const bubble = document.createElement('div');
+    bubble.className = `message-bubble ${type}-message`;
+    bubble.textContent = text;
+    
+    // Add playing indicator if needed
+    if (isPlaying) {
+      const indicator = document.createElement('div');
+      indicator.className = 'playing-indicator';
+      indicator.innerHTML = '<span></span><span></span><span></span>';
+      bubble.appendChild(indicator);
+      
+      // Remove indicator when done playing
+      setTimeout(() => {
+        if (indicator.parentNode) indicator.remove();
+      }, text.length * this.processingSpeed + 1000);
+    }
+    
+    this.conversationContainer.appendChild(bubble);
+    
+    // Scroll to bottom
+    this.conversationContainer.scrollTop = this.conversationContainer.scrollHeight;
+  }
+  
+  /**
+   * Send a message and convert it to tones
+   */
+  sendMessage() {
+    const text = this.messageInput.value.trim();
+    if (!text) return;
+    
+    // Add user message
+    this.addMessage(text, 'user');
+    
+    // Clear input
+    this.messageInput.value = '';
+    
+    // Convert to tones
+    this.textToTone(text);
+    
+    // If LLM integration is enabled, use that for responses
+    if (this.llmSettings.enabled && this.llmSettings.apiKey) {
+      // Add a small delay for better UX
+      setTimeout(() => this.getAIResponse(text), text.length * this.processingSpeed + 500);
+    } else {
+      // Fallback to simulated responses
+      setTimeout(() => {
+        const responses = [
+          "I received your tone message!",
+          "Your tones were clear and understandable.",
+          "Thanks for the musical message!",
+          "The tone translation worked perfectly.",
+          "I understood every note of that message."
+        ];
+        const response = responses[Math.floor(Math.random() * responses.length)];
+        this.addMessage(response, 'tone', true);
+        this.textToTone(response);
+      }, text.length * this.processingSpeed + 1000);
+    }
+  }
+  
+  /**
+   * Send text to LLM API and get a response
+   */
+  async getAIResponse(userMessage) {
+    // Create a loading message
+    const loadingMessageBubble = document.createElement('div');
+    loadingMessageBubble.className = 'message-bubble llm-message';
+    loadingMessageBubble.textContent = 'AI is thinking...';
+    
+    const indicator = document.createElement('div');
+    indicator.className = 'playing-indicator';
+    indicator.innerHTML = '<span></span><span></span><span></span>';
+    loadingMessageBubble.appendChild(indicator);
+    
+    this.conversationContainer.appendChild(loadingMessageBubble);
+    this.conversationContainer.scrollTop = this.conversationContainer.scrollHeight;
+    
+    try {
+      let response;
+      
+      if (this.llmSettings.model.includes('claude')) {
+        // Anthropic Claude API
+        response = await fetch(this.llmSettings.apiEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.llmSettings.apiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: this.llmSettings.model,
+            messages: [
+              { role: 'system', content: this.llmSettings.systemPrompt },
+              { role: 'user', content: userMessage }
+            ],
+            max_tokens: 1000
+          })
+        });
+      } else {
+        // OpenAI API
+        response = await fetch(this.llmSettings.apiEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.llmSettings.apiKey}`
+          },
+          body: JSON.stringify({
+            model: this.llmSettings.model,
+            messages: [
+              { role: 'system', content: this.llmSettings.systemPrompt },
+              { role: 'user', content: userMessage }
+            ],
+            max_tokens: 1000
+          })
+        });
+      }
+      
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Extract the response text based on API format
+      let aiResponseText;
+      if (this.llmSettings.model.includes('claude')) {
+        aiResponseText = data.content[0].text;
+      } else {
+        aiResponseText = data.choices[0].message.content;
+      }
+      
+      // Remove the loading message
+      this.conversationContainer.removeChild(loadingMessageBubble);
+      
+      // Display the AI response
+      this.addMessage(aiResponseText, 'llm', true);
+      
+      // Convert to tones
+      this.textToTone(aiResponseText);
+      
+    } catch (error) {
+      console.error('Error with AI API:', error);
+      
+      // Update the loading message with the error
+      loadingMessageBubble.textContent = `Error: ${error.message}`;
+      loadingMessageBubble.style.background = '#cf6679';
+      
+      if (indicator.parentNode) indicator.remove();
+    }
+  }
+  
+  /**
+   * Direct call to LLM API from the Ask AI button
+   */
+  askLLM() {
+    const text = this.messageInput.value.trim();
+    if (!text) {
+      return;
+    }
+    
+    // Add user message
+    this.addMessage(text, 'user');
+    
+    // Clear input
+    this.messageInput.value = '';
+    
+    // Get AI response
+    if (this.llmSettings.apiKey) {
+      this.getAIResponse(text);
+    } else {
+      this.addMessage('Please enter an API key in the settings below to use AI integration.', 'llm');
+    }
+  }
+  
+  /**
+   * Convert text to tones and play them
+   * @param {string} text - The text to convert to tones
+   */
+  textToTone(text) {
+    if (!text) return;
+      // Show ABC notation
+    this.abcDisplay.displayNotation(text);
+	
+    this.isProcessing = true;
+    this.audioQueue = [];
+    
+    // Add each character to the processing queue
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (this.charToFrequency[char]) {
+        this.audioQueue.push({
+          char: char,
+          frequency: this.charToFrequency[char],
+          duration: this.processingSpeed / 1000 // Convert ms to seconds
+        });
+      }
+    }
+    
+    // Process the queue
+    this.processAudioQueue();
+  }
+  
+  /**
+   * Process audio queue by playing tones in sequence
+   */
+  processAudioQueue() {
+    if (!this.isProcessing || this.audioQueue.length === 0) {
+      this.isProcessing = false;
+      return;
+    }
+    
+    // Get the next character in the queue
+    const item = this.audioQueue.shift();
+    
+    // Play the tone
+    this.playTone(item.frequency, item.duration);
+    
+    // Process the next item after the duration
+    setTimeout(() => {
+      this.processAudioQueue();
+    }, this.processingSpeed);
+  }
+  
+  /**
+   * Play a single tone
+   * @param {number} frequency - The frequency to play
+   * @param {number} duration - The duration to play for
+   */
+  playTone(frequency, duration) {
+    const oscillator = this.audioContext.createOscillator();
+    const gainNode = this.audioContext.createGain();
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.value = frequency;
+    
+    // Connect the oscillator to the analyser for visualization
+    oscillator.connect(this.analyser);
+    this.analyser.connect(gainNode);
+    gainNode.connect(this.audioContext.destination);
+    
+    // Apply fade in/out to avoid clicks
+    const now = this.audioContext.currentTime;
+    const fadeTime = Math.min(duration * 0.1, 0.01);
+    
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(0.5, now + fadeTime);
+    gainNode.gain.linearRampToValueAtTime(0, now + duration - fadeTime);
+    
+    oscillator.start(now);
+    oscillator.stop(now + duration);
+  }
+  
+  /**
+   * Start listening for tones
+   */
+  startListening() {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      alert("Listening for tones... (This is a simulation in this demo)");
+      
+      // Simulate receiving tones
+      setTimeout(() => {
+        const receivedMessage = "This is a message received as tones";
+        this.addMessage(receivedMessage, 'tone');
+      }, 2000);
+    } else {
+      alert('Microphone access not supported in this browser.');
+    }
+  }
+  
+  /**
+   * Replay the last message as tones
+   */
+  replayLastMessage() {
+    if (this.conversation.length === 0) return;
+    
+    const lastMessage = this.conversation[this.conversation.length - 1];
+    this.textToTone(lastMessage.text);
+    
+    // Find the last message bubble and add playing indicator
+    const bubbles = this.conversationContainer.querySelectorAll(`.${lastMessage.type}-message`);
+    if (bubbles.length > 0) {
+      const lastBubble = bubbles[bubbles.length - 1];
+      
+      // Remove existing indicator if any
+      const existingIndicator = lastBubble.querySelector('.playing-indicator');
+      if (existingIndicator) existingIndicator.remove();
+      
+      // Add new indicator
+      const indicator = document.createElement('div');
+      indicator.className = 'playing-indicator';
+      indicator.innerHTML = '<span></span><span></span><span></span>';
+      lastBubble.appendChild(indicator);
+      
+      // Remove indicator when done playing
+      setTimeout(() => {
+        if (indicator.parentNode) indicator.remove();
+      }, lastMessage.text.length * this.processingSpeed + 1000);
+    }
+  }
+  
+  /**
+   * Show frequency table with dark theme
+   */
+  showFrequencyTable() {
+    // Create a modal dialog
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    `;
+    
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = `
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 80%;
+      max-height: 80%;
+      overflow: auto;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      border: 1px solid var(--border);
+    `;
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Close';
+    closeBtn.style.cssText = `
+      float: right;
+      background: var(--primary);
+      color: black;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+    `;
+    closeBtn.onclick = () => modal.remove();
+    
+    const title = document.createElement('h2');
+    title.textContent = 'Character to Frequency Mapping';
+    title.style.marginTop = '0';
+    title.style.color = 'var(--primary)';
+    
+    const table = document.createElement('table');
+    table.style.cssText = `
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    `;
+    
+    // Table header
+    let html = `
+      <thead>
+        <tr>
+          <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--border); color: var(--primary);">Character</th>
+          <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--border); color: var(--primary);">ASCII</th>
+          <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--border); color: var(--primary);">Frequency (Hz)</th>
+          <th style="text-align: left; padding: 8px; border-bottom: 1px solid var(--border); color: var(--primary);">Musical Note</th>
+        </tr>
+      </thead>
+      <tbody>
+    `;
+    
+    // Sort by ASCII code
+    const entries = Object.entries(this.charToFrequency).sort((a, b) => {
+      return a[0].charCodeAt(0) - b[0].charCodeAt(0);
+    });
+    
+    // Function to get approximate musical note from frequency
+    const getMusicalNote = (freq) => {
+      const noteNames = ['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'];
+      const a4 = 440; // A4 is 440 Hz
+      
+      // Calculate how many half steps away from A4
+      const halfSteps = Math.round(12 * Math.log2(freq / a4));
+      
+      // Calculate octave and note index
+      const octave = 4 + Math.floor((halfSteps + 9) / 12);
+      let noteIdx = (halfSteps + 9) % 12;
+      if (noteIdx < 0) noteIdx += 12;
+      
+      return `${noteNames[noteIdx]}${octave}`;
+    };
+    
+    // Table rows
+    for (const [char, freq] of entries) {
+      const displayChar = char === ' ' ? '(space)' : char;
+      const ascii = char.charCodeAt(0);
+      const note = getMusicalNote(freq);
+      
+      html += `
+        <tr>
+          <td style="padding: 8px; border-bottom: 1px solid var(--border);">${displayChar}</td>
+          <td style="padding: 8px; border-bottom: 1px solid var(--border);">${ascii}</td>
+          <td style="padding: 8px; border-bottom: 1px solid var(--border);">${freq.toFixed(2)} Hz</td>
+          <td style="padding: 8px; border-bottom: 1px solid var(--border);">${note}</td>
+        </tr>
+      `;
+    }
+    
+    html += '</tbody>';
+    table.innerHTML = html;
+    
+    modalContent.appendChild(closeBtn);
+    modalContent.appendChild(title);
+    modalContent.appendChild(table);
+    modal.appendChild(modalContent);
+    
+    document.body.appendChild(modal);
+  }
+}
+
+/**
+ * ABC Notation Display Component
+ * This module provides ABC notation display for tone language systems
+ */
+
+class ABCNotationDisplay {
+  /**
+   * Create a new ABC Notation display component
+   * @param {Object} options - Configuration options
+   * @param {HTMLElement} options.container - Container element to append the display to
+   * @param {Object} options.charToFreq - Map of characters to frequencies
+   * @param {boolean} options.compactMode - Whether to use compact mode (default: true)
+   * @param {boolean} options.showMeasures - Whether to show measures (default: true)
+   */
+  constructor(options) {
+    this.container = options.container;
+    this.charToFreq = options.charToFreq || {};
+    this.compactMode = options.compactMode !== undefined ? options.compactMode : true;
+    this.showMeasures = options.showMeasures !== undefined ? options.showMeasures : true;
+    
+    this.setupUI();
+  }
+  
+  /**
+   * Set up UI elements
+   */
+  setupUI() {
+    // Add styles for ABC notation display
+    if (!document.getElementById('abc-notation-styles')) {
+      const style = document.createElement('style');
+      style.id = 'abc-notation-styles';
+      style.textContent = `
+        /* Dark theme colors */
+        :root {
+          --abc-bg: #2d2d2d;
+          --abc-surface: #1e1e1e;
+          --abc-primary: #bb86fc;
+          --abc-secondary: #03dac6;
+          --abc-error: #cf6679;
+          --abc-text: #e0e0e0;
+          --abc-text-medium: #a0a0a0;
+          --abc-border: #333;
+        }
+        
+        /* ABC Notation Container */
+        .abc-container {
+          background: var(--abc-bg, #2d2d2d);
+          border-radius: 8px;
+          margin: 15px 0;
+          border: 1px solid var(--abc-border, #333);
+          overflow: hidden;
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          color: var(--abc-text, #e0e0e0);
+        }
+        
+        .abc-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 10px 15px;
+          background: rgba(0,0,0,0.2);
+          border-bottom: 1px solid var(--abc-border, #333);
+        }
+        
+        .abc-title {
+          margin: 0;
+          color: var(--abc-primary, #bb86fc);
+          font-size: 16px;
+          font-weight: 500;
+        }
+        
+        .abc-controls {
+          display: flex;
+          gap: 8px;
+        }
+        
+        .abc-btn {
+          padding: 6px 12px;
+          background: rgba(0,0,0,0.2);
+          border: 1px solid var(--abc-border, #333);
+          color: var(--abc-text, #e0e0e0);
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 13px;
+          transition: all 0.2s;
+        }
+        
+        .abc-btn:hover {
+          background: rgba(255,255,255,0.05);
+        }
+        
+        .abc-display {
+          padding: 15px;
+          font-family: monospace;
+          white-space: pre;
+          overflow-x: auto;
+          max-height: 200px;
+          overflow-y: auto;
+          line-height: 1.5;
+        }
+        
+        /* Compact display */
+        .note-display {
+          margin-top: 5px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+        }
+        
+        .note {
+          display: inline-block;
+          padding: 3px 8px;
+          background: rgba(187, 134, 252, 0.1);
+          border-radius: 4px;
+          font-weight: bold;
+          font-family: 'Consolas', monospace;
+          transition: transform 0.1s;
+        }
+        
+        .note:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .note-natural { color: var(--abc-text, #e0e0e0); }
+        .note-sharp { color: var(--abc-secondary, #03dac6); }
+        .note-flat { color: var(--abc-error, #cf6679); }
+        
+        .measure {
+          display: inline-flex;
+          gap: 5px;
+          border-right: 1px solid var(--abc-border, #333);
+          padding-right: 8px;
+          margin-right: 8px;
+          align-items: center;
+        }
+        
+        /* ABC text styles */
+        .abc-text {
+          font-family: 'Courier New', monospace;
+          color: var(--abc-text, #e0e0e0);
+          line-height: 1.4;
+        }
+        
+        .abc-header-line {
+          color: var(--abc-text-medium, #a0a0a0);
+        }
+        
+        .abc-note {
+          color: var(--abc-primary, #bb86fc);
+        }
+        
+        /* Scrollbars */
+        .abc-display::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        
+        .abc-display::-webkit-scrollbar-track {
+          background: rgba(0,0,0,0.1);
+        }
+        
+        .abc-display::-webkit-scrollbar-thumb {
+          background: var(--abc-border, #333);
+          border-radius: 4px;
+        }
+        
+        .abc-display::-webkit-scrollbar-thumb:hover {
+          background: var(--abc-primary, #bb86fc);
+        }
+/* Compact & Modern Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 38px; /* Adjusted for proper scale */
+    height: 20px;
+    cursor: pointer;
+}
+
+/* Hide default checkbox */
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+/* Toggle background */
+.slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-surface-light);
+    transition: 0.4s;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+}
+
+/* Toggle knob */
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--text-secondary);
+    transition: 0.4s;
+    border-radius: 50%;
+}
+
+/* When checked, change colors */
+input:checked + .slider {
+    background-color: var(--primary);
+    border-color: var(--primary-dark);
+}
+
+/* Move knob to the right when enabled */
+input:checked + .slider:before {
+    transform: translateX(18px);
+    background-color: white;
+}
+
+/* Hover effect */
+.toggle-switch:hover .slider {
+    background-color: var(--border);
+}
+		
+		
+		
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // Create container
+    this.abcContainer = document.createElement('div');
+    this.abcContainer.className = 'abc-container';
+    
+    // Create header
+    const header = document.createElement('div');
+    header.className = 'abc-header';
+    
+    const title = document.createElement('h3');
+    title.className = 'abc-title';
+    title.textContent = 'ABC Notation';
+    header.appendChild(title);
+    
+    // Control buttons
+    const controls = document.createElement('div');
+    controls.className = 'abc-controls';
+    
+    this.formatBtn = document.createElement('button');
+    this.formatBtn.className = 'abc-btn';
+    this.formatBtn.textContent = this.compactMode ? 'Show Standard Format' : 'Show Compact Format';
+    this.formatBtn.onclick = () => this.toggleFormat();
+    controls.appendChild(this.formatBtn);
+    
+    this.measureBtn = document.createElement('button');
+    this.measureBtn.className = 'abc-btn';
+    this.measureBtn.textContent = this.showMeasures ? 'Hide Measures' : 'Show Measures';
+    this.measureBtn.onclick = () => this.toggleMeasures();
+    controls.appendChild(this.measureBtn);
+    
+    header.appendChild(controls);
+    this.abcContainer.appendChild(header);
+    
+    // Display area
+    this.displayArea = document.createElement('div');
+    this.displayArea.className = 'abc-display';
+    this.abcContainer.appendChild(this.displayArea);
+    
+    // Add to container
+    this.container.appendChild(this.abcContainer);
+  }
+  
+  /**
+   * Toggle between standard and compact format
+   */
+  toggleFormat() {
+    this.compactMode = !this.compactMode;
+    this.formatBtn.textContent = this.compactMode ? 'Show Standard Format' : 'Show Compact Format';
+    
+    // Redisplay current content if available
+    if (this.currentText) {
+      this.displayNotation(this.currentText);
+    }
+  }
+  
+  /**
+   * Toggle measures display
+   */
+  toggleMeasures() {
+    this.showMeasures = !this.showMeasures;
+    this.measureBtn.textContent = this.showMeasures ? 'Hide Measures' : 'Show Measures';
+    
+    // Redisplay current content if available
+    if (this.currentText) {
+      this.displayNotation(this.currentText);
+    }
+  }
+  
+  /**
+   * Display the ABC notation for text
+   * @param {string} text - Text to convert and display
+   */
+  displayNotation(text) {
+    this.currentText = text;
+    this.displayArea.innerHTML = '';
+    
+    if (this.compactMode) {
+      const compactDisplay = this.generateCompactNotation(text);
+      this.displayArea.appendChild(compactDisplay);
+    } else {
+      const abcNotation = this.generateABCNotation(text);
+      const formattedABC = this.formatABCNotation(abcNotation);
+      this.displayArea.appendChild(formattedABC);
+    }
+  }
+  
+  /**
+   * Generate ABC notation for text
+   * @param {string} text - Text to convert
+   * @returns {string} - ABC notation string
+   */
+  generateABCNotation(text) {
+    // ABC header
+    let abc = `X:1\nT:Tone Message\nM:4/4\nL:1/4\nK:C\n`;
+    
+    // Generate notes
+    const notes = [];
+    
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (!this.charToFreq[char]) {
+        notes.push('z'); // Use rest for characters without mapping
+        continue;
+      }
+      
+      const freq = this.charToFreq[char];
+      
+      // Convert frequency to ABC notation (A4 = 440Hz)
+      const halfSteps = Math.round(12 * Math.log2(freq / 440));
+      const octave = 4 + Math.floor((halfSteps + 9) / 12);
+      let noteIdx = (halfSteps + 9) % 12;
+      if (noteIdx < 0) noteIdx += 12;
+      
+      // Note names in ABC notation
+      const noteNames = ['C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'];
+      const accidentals = ['', '^', '', '^', '', '', '^', '', '^', '', '^', ''];
+      
+      let noteName = noteNames[noteIdx];
+      let accidental = accidentals[noteIdx];
+      
+      // Apply octave notation
+      if (octave >= 5) {
+        noteName = noteName.toLowerCase();
+        for (let j = 0; j < (octave - 5); j++) {
+          noteName += "'";
+        }
+      } else {
+        for (let j = 0; j < (4 - octave); j++) {
+          noteName += ",";
+        }
+      }
+      
+      notes.push(accidental + noteName);
+    }
+    
+    // Add notes with measures if requested
+    if (this.showMeasures) {
+      for (let i = 0; i < notes.length; i++) {
+        abc += notes[i] + ' ';
+        if ((i + 1) % 4 === 0 && i < notes.length - 1) {
+          abc += '| ';
+        }
+      }
+    } else {
+      abc += notes.join(' ');
+    }
+    
+    // Add final bar
+    abc += ' |';
+    
+    return abc;
+  }
+  
+  /**
+   * Format ABC notation with syntax highlighting
+   * @param {string} abc - ABC notation string
+   * @returns {HTMLElement} - Formatted display element
+   */
+  formatABCNotation(abc) {
+    const container = document.createElement('div');
+    container.className = 'abc-text';
+    
+    const lines = abc.split('\n');
+    
+    lines.forEach(line => {
+      const lineElement = document.createElement('div');
+      
+      if (line.includes(':')) {
+        // Header line
+        lineElement.className = 'abc-header-line';
+        lineElement.textContent = line;
+      } else {
+        // Notes line
+        let formattedLine = '';
+        let inNote = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          
+          if (/[A-Ga-g\^_=]/.test(char)) {
+            // Start of note or accidental
+            if (!inNote) {
+              formattedLine += '<span class="abc-note">';
+              inNote = true;
+            }
+            formattedLine += char;
+          } else {
+            // End of note
+            if (inNote) {
+              formattedLine += '</span>';
+              inNote = false;
+            }
+            formattedLine += char;
+          }
+        }
+        
+        // Close any open span
+        if (inNote) {
+          formattedLine += '</span>';
+        }
+        
+        lineElement.innerHTML = formattedLine;
+      }
+      
+      container.appendChild(lineElement);
+    });
+    
+    return container;
+  }
+  
+  /**
+   * Generate compact visual notation
+   * @param {string} text - Text to convert
+   * @returns {HTMLElement} - Compact display element
+   */
+  generateCompactNotation(text) {
+    const container = document.createElement('div');
+    container.className = 'note-display';
+    
+    let currentMeasure = null;
+    let noteCount = 0;
+    
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (!this.charToFreq[char]) continue;
+      
+      const freq = this.charToFreq[char];
+      
+      // Create a new measure if needed
+      if (this.showMeasures && (noteCount % 4 === 0 || currentMeasure === null)) {
+        currentMeasure = document.createElement('div');
+        currentMeasure.className = 'measure';
+        container.appendChild(currentMeasure);
+      } else if (!this.showMeasures && currentMeasure === null) {
+        currentMeasure = container; // Just use the container if no measures
+      }
+      
+      // Convert to note info
+      const halfSteps = Math.round(12 * Math.log2(freq / 440));
+      const octave = 4 + Math.floor((halfSteps + 9) / 12);
+      let noteIdx = (halfSteps + 9) % 12;
+      if (noteIdx < 0) noteIdx += 12;
+      
+      // Note names with symbols
+      const noteNames = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+      const noteClasses = [
+        'note-natural', 'note-sharp', 'note-natural', 'note-sharp', 
+        'note-natural', 'note-natural', 'note-sharp', 'note-natural', 
+        'note-sharp', 'note-natural', 'note-sharp', 'note-natural'
+      ];
+      
+      // Create note element
+      const note = document.createElement('span');
+      note.className = `note ${noteClasses[noteIdx]}`;
+      note.textContent = `${noteNames[noteIdx]}${octave}`;
+      note.title = `Character: "${char}" | ASCII: ${char.charCodeAt(0)} | Frequency: ${freq.toFixed(2)}Hz`;
+      
+      // Add to current measure
+      currentMeasure.appendChild(note);
+      noteCount++;
+    }
+    
+    return container;
+  }
+  
+  /**
+   * Show or hide the ABC notation display
+   * @param {boolean} visible - Whether the display should be visible
+   */
+  setVisible(visible) {
+    this.abcContainer.style.display = visible ? 'block' : 'none';
+  }
+}
+
+// Example usage:
+/*
+// Create a mapping from characters to frequencies
+const charToFreq = {};
+const baseFreq = 220; // A3
+
+// Map ASCII printable characters (32-126) to frequencies
+for (let i = 32; i <= 126; i++) {
+  const char = String.fromCharCode(i);
+  const freq = baseFreq * Math.pow(2, (i - 32) / 12);
+  charToFreq[char] = freq;
+}
+
+// Create the ABC notation display
+const abcDisplay = new ABCNotationDisplay({
+  container: document.getElementById('abc-container'),
+  charToFreq: charToFreq,
+  compactMode: true,
+  showMeasures: true
+});
+
+// Display notation for a text
+abcDisplay.displayNotation("Hello, World!");
+*/
+
+
+
+// Initialize the UI
+window.addEventListener('DOMContentLoaded', () => {
+  window.toneLanguageUI = new ToneLanguageUI();
+});
+</script>
+</body>
+</html>
